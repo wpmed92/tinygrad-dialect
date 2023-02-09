@@ -20,7 +20,7 @@
 #include "TinyGrad/TinyGradPasses.h"
 
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
-#include "mlir/Conversion/ArithmeticToLLVM/ArithmeticToLLVM.h"
+#include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
 #include "mlir/Conversion/MathToLLVM/MathToLLVM.h"
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVMPass.h"
@@ -30,7 +30,7 @@
 #include "mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -88,7 +88,7 @@ public:
 
     // Generate a call to printf for the current element of the loop.
     auto printOp = mlir::cast<tinygrad::PrintOp>(op);
-    auto elementLoad = rewriter.create<mlir::memref::LoadOp>(loc, printOp.input(), loopIvs);
+    auto elementLoad = rewriter.create<mlir::memref::LoadOp>(loc, printOp.getInput(), loopIvs);
     rewriter.create<mlir::func::CallOp>(loc, printfRef, rewriter.getIntegerType(32),
                             mlir::ArrayRef<mlir::Value>({formatSpecifierCst, elementLoad}));
 
@@ -166,9 +166,9 @@ void TinyGradToLLVMLoweringPass::runOnOperation() {
 
   populateAffineToStdConversionPatterns(patterns);
   populateSCFToControlFlowConversionPatterns(patterns);
-  mlir::arith::populateArithmeticToLLVMConversionPatterns(typeConverter, patterns);
+  mlir::arith::populateArithToLLVMConversionPatterns(typeConverter, patterns);
   mlir::populateMathToLLVMConversionPatterns(typeConverter, patterns);
-  mlir::populateMemRefToLLVMConversionPatterns(typeConverter, patterns);
+  mlir::populateFinalizeMemRefToLLVMConversionPatterns(typeConverter, patterns);
   mlir::cf::populateControlFlowToLLVMConversionPatterns(typeConverter, patterns);
   populateFuncToLLVMConversionPatterns(typeConverter, patterns);
 

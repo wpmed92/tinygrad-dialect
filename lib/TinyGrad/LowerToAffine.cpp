@@ -21,7 +21,7 @@
 
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Math/IR/Math.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -57,7 +57,7 @@ class ConstantOpLowering : public mlir::OpRewritePattern<tinygrad::ConstantOp> {
   using OpRewritePattern<tinygrad::ConstantOp>::OpRewritePattern;
 
   mlir::LogicalResult matchAndRewrite(tinygrad::ConstantOp op, mlir::PatternRewriter &rewriter) const final {
-    mlir::DenseElementsAttr constantValue = op.value();
+    mlir::DenseElementsAttr constantValue = op.getValue();
     mlir::Location loc = op.getLoc();
 
     // When lowering the constant operation, we allocate and assign the constant
@@ -106,7 +106,7 @@ class ConstantOpLowering : public mlir::OpRewritePattern<tinygrad::ConstantOp> {
       if (dimension == valueShape.size()) {
         rewriter.create<mlir::AffineStoreOp>(
             loc, rewriter.create<mlir::arith::ConstantOp>(loc, *valueIt++), alloc,
-            llvm::makeArrayRef(indices));
+            llvm::ArrayRef(indices));
         return;
       }
 
@@ -196,14 +196,12 @@ LoweredUnaryOp buildLoweredUnaryOp(mlir::OpBuilder &builder, mlir::Location loc,
 }
 
 template <>
-mlir::arith::SelectOp buildLoweredUnaryOp(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value operand, mlir::MLIRContext *ctx)
+mlir::arith::MaxFOp buildLoweredUnaryOp(mlir::OpBuilder &builder, mlir::Location loc, mlir::Value operand, mlir::MLIRContext *ctx)
 {
-  // Implementation using maxf cannot be legalized, we split it up into a cmpf and a select
   double dzero = 0.0f;
   llvm::APFloat apzero = llvm::APFloat(dzero);
   mlir::arith::ConstantFloatOp zero = builder.create<mlir::arith::ConstantFloatOp>(loc, apzero, mlir::FloatType::getF64(ctx));
-  auto compare = builder.create<mlir::arith::CmpFOp>(loc, mlir::arith::CmpFPredicate::OGT, operand, zero);
-  return builder.create<mlir::arith::SelectOp>(loc, compare, operand, zero);
+  return builder.create<mlir::arith::MaxFOp>(loc, operand, zero);
 }
 
 template <>
@@ -230,9 +228,9 @@ template <typename BinaryOp, typename LoweredBinaryOp>struct BinaryOpLowering : 
                      typename BinaryOp::Adaptor binaryAdaptor(memRefOperands);
 
                      auto loadedLhs = builder.create<mlir::AffineLoadOp>(
-                         loc, binaryAdaptor.lhs(), loopIvs);
+                         loc, binaryAdaptor.getLhs(), loopIvs);
                      auto loadedRhs = builder.create<mlir::AffineLoadOp>(
-                         loc, binaryAdaptor.rhs(), loopIvs);
+                         loc, binaryAdaptor.getRhs(), loopIvs);
 
                      return buildLoweredBinaryOp<LoweredBinaryOp>(builder, loc, loadedLhs, loadedRhs);
                    });
@@ -257,7 +255,7 @@ template <typename UnaryOp, typename LoweredUnaryOp>struct UnaryOpLowering : pub
                          mlir::ValueRange loopIvs) {
                      typename UnaryOp::Adaptor unaryAdaptor(memRefOperands);
 
-                     auto loadedOperand = builder.create<mlir::AffineLoadOp>(loc, unaryAdaptor.operand(), loopIvs);
+                     auto loadedOperand = builder.create<mlir::AffineLoadOp>(loc, unaryAdaptor.getOperand(), loopIvs);
 
                      return buildLoweredUnaryOp<LoweredUnaryOp>(builder, loc, loadedOperand, ctx);
                    });
@@ -274,7 +272,7 @@ using PowOpLowering = BinaryOpLowering<tinygrad::PowOp, mlir::math::PowFOp>;
 using CmpEqLowering = BinaryOpLowering<tinygrad::CmpEq, mlir::arith::CmpFOp>;
 
 // Unary TinyGrad ops
-using ReluOpLowering = UnaryOpLowering<tinygrad::ReluOp, mlir::arith::SelectOp>;
+using ReluOpLowering = UnaryOpLowering<tinygrad::ReluOp, mlir::arith::MaxFOp>;
 using ExpOpLowering  = UnaryOpLowering<tinygrad::ExpOp,  mlir::math::ExpOp>;
 using LogOpLowering  = UnaryOpLowering<tinygrad::LogOp,  mlir::math::LogOp>;
 using NegOpLowering  = UnaryOpLowering<tinygrad::NegOp,  mlir::arith::NegFOp>;
@@ -286,7 +284,7 @@ public:
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TinyGradToAffineLowerPass)
 
   void getDependentDialects(mlir::DialectRegistry &registry) const override {
-      registry.insert<mlir::AffineDialect, mlir::arith::ArithmeticDialect, mlir::func::FuncDialect, mlir::memref::MemRefDialect, mlir::math::MathDialect>();
+      registry.insert<mlir::AffineDialect, mlir::arith::ArithDialect, mlir::func::FuncDialect, mlir::memref::MemRefDialect, mlir::math::MathDialect>();
   }
 
   void runOnOperation() final;
@@ -298,7 +296,7 @@ void TinyGradToAffineLowerPass::runOnOperation() {
 
   target.addIllegalDialect<tinygrad::TinyGradDialect>();
   target.addLegalDialect<mlir::AffineDialect, mlir::BuiltinDialect,
-    mlir::func::FuncDialect, mlir::arith::ArithmeticDialect, mlir::math::MathDialect, mlir::memref::MemRefDialect>();
+    mlir::func::FuncDialect, mlir::arith::ArithDialect, mlir::math::MathDialect, mlir::memref::MemRefDialect>();
   target.addDynamicallyLegalOp<tinygrad::PrintOp>([](tinygrad::PrintOp op) {
       return llvm::none_of(op->getOperandTypes(),
                            [](mlir::Type type) { return type.isa<mlir::TensorType>(); });
