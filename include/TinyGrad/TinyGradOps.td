@@ -14,7 +14,7 @@ movement_op (RESHAPE, PERMUTE, PAD, SHRINK, EXPAND, FLIP)  # A -> B (different s
 processing_op (CONV)                                       # A + B -> C
 */
 
-def ConstantOp : TinyGradOp<"constant", [NoSideEffect]> {
+def ConstantOp : TinyGradOp<"constant", [NoMemoryEffect]> {
   let summary = "constant";
   let description = [{
     Constant operation turns a literal into an SSA value. The data is attached
@@ -77,19 +77,19 @@ class BinaryOp<string mnemonic, list<Trait> traits = []> : TinyGradOp<mnemonic, 
 }
 
 // Binary
-def AddOp : BinaryOp<"add",   [NoSideEffect]>;
-def SubOp : BinaryOp<"sub",   [NoSideEffect]>;
-def MulOp : BinaryOp<"mul",   [NoSideEffect]>;
-def DivOp : BinaryOp<"div",   [NoSideEffect]>;
-def PowOp : BinaryOp<"pow",   [NoSideEffect]>;
-def CmpEq : BinaryOp<"cmpeq", [NoSideEffect]>;
+def AddOp : BinaryOp<"add",   [NoMemoryEffect]>;
+def SubOp : BinaryOp<"sub",   [NoMemoryEffect]>;
+def MulOp : BinaryOp<"mul",   [NoMemoryEffect]>;
+def DivOp : BinaryOp<"div",   [NoMemoryEffect]>;
+def PowOp : BinaryOp<"pow",   [NoMemoryEffect]>;
+def CmpEq : BinaryOp<"cmpeq", [NoMemoryEffect]>;
 
 // Unary
-def ReluOp : UnaryOp<"relu", [NoSideEffect]>;
-def ExpOp  : UnaryOp<"exp",  [NoSideEffect]>;
-def LogOp  : UnaryOp<"log",  [NoSideEffect]>;
-def NegOp  : UnaryOp<"neg",  [NoSideEffect]>;
-def Gt0Op  : UnaryOp<"gt0",  [NoSideEffect]>;
+def ReluOp : UnaryOp<"relu", [NoMemoryEffect]>;
+def ExpOp  : UnaryOp<"exp",  [NoMemoryEffect]>;
+def LogOp  : UnaryOp<"log",  [NoMemoryEffect]>;
+def NegOp  : UnaryOp<"neg",  [NoMemoryEffect]>;
+def Gt0Op  : UnaryOp<"gt0",  [NoMemoryEffect]>;
 
 class MovementOp<string mnemonic, list<Trait> traits = []> : TinyGradOp<mnemonic, traits>   {
   let summary = "Base class for movement tinygrad operations";
@@ -117,7 +117,7 @@ def ShrinkOp  : MovementOp<"shrink">;
 def ExpandOp  : MovementOp<"expand">;
 def FlipOp    : MovementOp<"flip">;
 
-def PrintOp : TinyGradOp<"print", [NoSideEffect]> {
+def PrintOp : TinyGradOp<"print", [NoMemoryEffect]> {
     let summary = "print operation";
     let description = [{
         The "print" builtin operation prints a given input tensor, and produces

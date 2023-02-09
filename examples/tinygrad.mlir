@@ -24,7 +24,7 @@ func.func @main() {
     %11 = "tinygrad.div"(%10, %4) : (tensor<2x3xf64>, tensor<2x3xf64>) -> tensor<2x3xf64>
     %12 = "tinygrad.neg"(%9) : (tensor<2x3xf64>) -> tensor<2x3xf64>
     %13 = "tinygrad.gt0"(%12) : (tensor<2x3xf64>) -> tensor<2x3xi1>
-    %14 = "tinygrad.relu"(%9) :  (tensor<2x3xf64>) -> tensor<2x3xf64>
+    %14 = "tinygrad.relu"(%12) :  (tensor<2x3xf64>) -> tensor<2x3xf64>
      "tinygrad.print"(%14) : (tensor<2x3xf64>) -> ()
     return
 }
