@@ -58,52 +58,46 @@ struct ReshapeOpLowering : public mlir::ConversionPattern {
 
   mlir::LogicalResult matchAndRewrite(mlir::Operation *op, mlir::ArrayRef<mlir::Value> operands,
                   mlir::ConversionPatternRewriter &rewriter) const final {
-    tinygrad::ReshapeOp::Adaptor myAdaptor(operands);
+    tinygrad::ReshapeOp::Adaptor reshapeAdaptor(operands);
 
-    if (tinygrad::ReshapeOp castedOp = llvm::dyn_cast<tinygrad::ReshapeOp>(op)) {
-      auto shapeValue = castedOp.getShape();
-      auto tensor = myAdaptor.getOperand();
-      auto loc = op->getLoc();
+    if (tinygrad::ReshapeOp reshapeOp = llvm::dyn_cast<tinygrad::ReshapeOp>(op)) {
+      auto shapeAttr = reshapeOp.getShape();
+      auto tensor = reshapeAdaptor.getOperand();
+      auto loc = reshapeOp.getLoc();
+
+      // Make sure shape attribute is a 1D array
+      if (shapeAttr.getType().cast<mlir::TensorType>().getShape().size() != 1) {
+        return mlir::failure();
+      }
+
+      auto attrValues = shapeAttr.getValues<mlir::IntegerAttr>();
+
+      if (attrValues.size() == 0) {
+        return mlir::failure();
+      }
 
       // Creating a tensor from the attached shape attribute
-      auto attrValues = shapeValue.getValues<mlir::IntegerAttr>();
       mlir::SmallVector<int64_t, 1> shapeVector;
       shapeVector.push_back(attrValues.size());
     
-      auto shape1DType = mlir::RankedTensorType::get(shapeVector, shapeValue.getElementType());
+      auto shape1DType = mlir::RankedTensorType::get(shapeVector, shapeAttr.getElementType());
       auto tensorType = shape1DType.cast<mlir::TensorType>();
       auto memRefType = convertTensorToMemRef(tensorType);
       auto alloc = insertAllocAndDealloc(memRefType, loc, rewriter);
 
-      auto valueShape = memRefType.getShape();
+      auto shape = memRefType.getShape();
       mlir::SmallVector<mlir::Value, 8> constantIndices;
 
-      if (!valueShape.empty()) {
-        for (auto i : llvm::seq<int64_t>(
-            0, *std::max_element(valueShape.begin(), valueShape.end())))
-          constantIndices.push_back(rewriter.create<mlir::arith::ConstantIndexOp>(loc, i));
-      } else {
-        constantIndices.push_back(rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0));
+      for (auto i : llvm::seq<int64_t>(0, *std::max_element(shape.begin(), shape.end()))) {
+        constantIndices.push_back(rewriter.create<mlir::arith::ConstantIndexOp>(loc, i));
+      } 
+
+      // shape is guaranteed to have exactly one dimension
+      for (uint64_t i = 0, e = shape[0]; i != e; ++i) {
+        rewriter.create<mlir::AffineStoreOp>(
+              loc, rewriter.create<mlir::arith::ConstantOp>(loc, attrValues[i]), alloc,
+              llvm::ArrayRef(constantIndices[i]));
       }
-
-      mlir::SmallVector<mlir::Value, 2> indices;
-      auto valueIt = attrValues.begin();
-      std::function<void(uint64_t)> storeElements = [&](uint64_t dimension) {
-        if (dimension == valueShape.size()) {
-          rewriter.create<mlir::AffineStoreOp>(
-              loc, rewriter.create<mlir::arith::ConstantOp>(loc, *valueIt++), alloc,
-              llvm::ArrayRef(indices));
-          return;
-        }
-
-        for (uint64_t i = 0, e = valueShape[dimension]; i != e; ++i) {
-          indices.push_back(constantIndices[i]);
-          storeElements(dimension + 1);
-          indices.pop_back();
-        }
-      };
-
-      storeElements(0);
 
       auto tensorRewrite = rewriter.create<mlir::memref::ReshapeOp>(loc, *op->result_type_begin(), tensor, alloc);
 
