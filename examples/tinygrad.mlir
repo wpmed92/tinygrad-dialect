@@ -25,6 +25,8 @@ func.func @main() {
     %12 = "tinygrad.neg"(%9) : (tensor<2x3xf64>) -> tensor<2x3xf64>
     %13 = "tinygrad.gt0"(%12) : (tensor<2x3xf64>) -> tensor<2x3xi1>
     %14 = "tinygrad.relu"(%12) :  (tensor<2x3xf64>) -> tensor<2x3xf64>
-     "tinygrad.print"(%14) : (tensor<2x3xf64>) -> ()
+    "tinygrad.print"(%14) : (tensor<2x3xf64>) -> ()
+    %15 = "tinygrad.reshape"(%14) { shape = dense<[3, 2]> : tensor<2xi32>} : (tensor<2x3xf64>) -> memref<3x2xf64>
+    "tinygrad.print"(%15) : (memref<3x2xf64>) -> ()
     return
 }
