@@ -23,7 +23,6 @@
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -52,6 +51,69 @@ static mlir::Value insertAllocAndDealloc(mlir::MemRefType type, mlir::Location l
   dealloc->moveBefore(&parentBlock->back());
   return alloc;
 }
+
+struct ReshapeOpLowering : public mlir::ConversionPattern {
+ ReshapeOpLowering(mlir::MLIRContext *ctx)
+      : ConversionPattern(tinygrad::ReshapeOp::getOperationName(), 1, ctx) {}
+
+  mlir::LogicalResult matchAndRewrite(mlir::Operation *op, mlir::ArrayRef<mlir::Value> operands,
+                  mlir::ConversionPatternRewriter &rewriter) const final {
+    tinygrad::ReshapeOp::Adaptor myAdaptor(operands);
+
+    if (tinygrad::ReshapeOp castedOp = llvm::dyn_cast<tinygrad::ReshapeOp>(op)) {
+      auto shapeValue = castedOp.getShape();
+      auto tensor = myAdaptor.getOperand();
+      auto loc = op->getLoc();
+
+      // Creating a tensor from the attached shape attribute
+      auto attrValues = shapeValue.getValues<mlir::IntegerAttr>();
+      mlir::SmallVector<int64_t, 1> shapeVector;
+      shapeVector.push_back(attrValues.size());
+    
+      auto shape1DType = mlir::RankedTensorType::get(shapeVector, shapeValue.getElementType());
+      auto tensorType = shape1DType.cast<mlir::TensorType>();
+      auto memRefType = convertTensorToMemRef(tensorType);
+      auto alloc = insertAllocAndDealloc(memRefType, loc, rewriter);
+
+      auto valueShape = memRefType.getShape();
+      mlir::SmallVector<mlir::Value, 8> constantIndices;
+
+      if (!valueShape.empty()) {
+        for (auto i : llvm::seq<int64_t>(
+            0, *std::max_element(valueShape.begin(), valueShape.end())))
+          constantIndices.push_back(rewriter.create<mlir::arith::ConstantIndexOp>(loc, i));
+      } else {
+        constantIndices.push_back(rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0));
+      }
+
+      mlir::SmallVector<mlir::Value, 2> indices;
+      auto valueIt = attrValues.begin();
+      std::function<void(uint64_t)> storeElements = [&](uint64_t dimension) {
+        if (dimension == valueShape.size()) {
+          rewriter.create<mlir::AffineStoreOp>(
+              loc, rewriter.create<mlir::arith::ConstantOp>(loc, *valueIt++), alloc,
+              llvm::ArrayRef(indices));
+          return;
+        }
+
+        for (uint64_t i = 0, e = valueShape[dimension]; i != e; ++i) {
+          indices.push_back(constantIndices[i]);
+          storeElements(dimension + 1);
+          indices.pop_back();
+        }
+      };
+
+      storeElements(0);
+
+      auto tensorRewrite = rewriter.create<mlir::memref::ReshapeOp>(loc, *op->result_type_begin(), tensor, alloc);
+
+      rewriter.replaceOp(op, {tensorRewrite});
+      return mlir::success();
+    } else {
+      return mlir::failure();
+    }
+  }
+};
 
 class ConstantOpLowering : public mlir::OpRewritePattern<tinygrad::ConstantOp> {
   using OpRewritePattern<tinygrad::ConstantOp>::OpRewritePattern;
@@ -320,6 +382,9 @@ void TinyGradToAffineLowerPass::runOnOperation() {
     LogOpLowering,
     NegOpLowering,
     Gt0OpLowering,
+
+    // Movement
+    ReshapeOpLowering,
 
     PrintOpLowering>(&getContext());
 

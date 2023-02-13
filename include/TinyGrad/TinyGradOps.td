@@ -110,7 +110,29 @@ class MovementOp<string mnemonic, list<Trait> traits = []> : TinyGradOp<mnemonic
   );
 }
 
-def ReshapeOp : MovementOp<"reshape">;
+def ReshapeOp : MovementOp<"reshape"> {
+  let summary = "Reshape movement operation";
+  let description = [{
+    Reshapes the input tensor to a shape defined in 'shape' attribute.
+
+    ```mlir
+      %0 = "tinygrad.constant"()
+      { value = dense<[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]> : tensor<2x3xf64> }
+      : () -> tensor<2x3xf64>
+      %1 = "tinygrad.reshape"(%0)
+      { shape = dense<[3,2]> : tensor<2xi32> }
+      : (tensor<2x3xf64>) -> tensor<3x2xf64>
+    ```
+  }];
+
+  let arguments = (ins
+    I32ElementsAttr:$shape,
+    AnyTypeOf<[F64Tensor, F64MemRef]>:$operand
+  );
+
+  let results = (outs AnyTypeOf<[F64Tensor, F64MemRef]>);
+}
+
 def PermuteOp : MovementOp<"permute">;
 def PadOp     : MovementOp<"pad">;
 def ShrinkOp  : MovementOp<"shrink">;

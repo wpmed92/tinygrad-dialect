@@ -59,7 +59,7 @@ $ lli /path/to/tinygrad.ll
 - [x] GT0*
 
 ### Movement ops
-- [ ] RESHAPE
+- [x] RESHAPE
 - [ ] PERMUTE
 - [ ] PAD
 - [ ] SHRINK
@@ -79,21 +79,42 @@ $ lli /path/to/tinygrad.ll
 
 Unary op
 ```mlir
-  %0 = "tinygrad.constant"() {value = dense<[[2.0, 2.0, 2.0], [2.0, 2.0, 2.0]]> : tensor<2x3xf64>} : () -> tensor<2x3xf64>
-  %1 = "tinygrad.neg"(%0) : (tensor<2x3xf64>) -> tensor<2x3xf64>
-  "tinygrad.print"(%1) : (tensor<2x3xf64>) -> ()
+  func.func @main() {
+    %0 = "tinygrad.constant"() {value = dense<[[2.0, 2.0, 2.0], [2.0, 2.0, 2.0]]> : tensor<2x3xf64>} : () -> tensor<2x3xf64>
+    %1 = "tinygrad.neg"(%0) : (tensor<2x3xf64>) -> tensor<2x3xf64>
+    "tinygrad.print"(%1) : (tensor<2x3xf64>) -> ()
+    return
+  }
   Output:
-  [[-2.0, -2.0, -2.0], 
-  [-2.0, -2.0, -2.0]]
+  -2.0 -2.0 -2.0 
+  -2.0 -2.0 -2.0
 ```
 
 Binary op
 
 ```mlir
-  %0 = "tinygrad.constant"() {value = dense<[[2.0, 2.0, 2.0], [2.0, 2.0, 2.0]]> : tensor<2x3xf64>} : () -> tensor<2x3xf64>
-  %1 = "tinygrad.add"(%0, %0) : (tensor<2x3xf64>, tensor<2x3xf64>) -> tensor<2x3xf64>
-  "tinygrad.print"(%1) : (tensor<2x3xf64>) -> ()
+  func.func @main() {
+    %0 = "tinygrad.constant"() {value = dense<[[2.0, 2.0, 2.0], [2.0, 2.0, 2.0]]> : tensor<2x3xf64>} : () -> tensor<2x3xf64>
+    %1 = "tinygrad.add"(%0, %0) : (tensor<2x3xf64>, tensor<2x3xf64>) -> tensor<2x3xf64>
+    "tinygrad.print"(%1) : (tensor<2x3xf64>) -> ()
+    return
+  }
   Output:
-  [[4.0, 4.0, 4.0], 
-  [4.0, 4.0, 4.0]]
+  4.0 4.0 4.0 
+  4.0 4.0 4.0
+```
+
+Movement op
+
+```mlir
+  func.func @main() {
+    %0 = "tinygrad.constant"()  { value = dense<[[2.0, 2.0, 2.0], [2.0, 2.0, 2.0]]> : tensor<2x3xf64> } : () -> tensor<2x3xf64>
+    %1 = "tinygrad.reshape"(%0) { shape = dense<[3,2]> : tensor<2xi32> } : (tensor<2x3xf64>) -> memref<3x2xf64>
+    "tinygrad.print"(%1) : (memref<3x2xf64>) -> ()
+    return
+  }
+  Output:
+  2.0 2.0
+  2.0 2.0
+  2.0 2.0
 ```
